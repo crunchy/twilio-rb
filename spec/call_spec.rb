@@ -8,9 +8,9 @@ describe Twilio::Call do
 
   before { Twilio::Config.setup :account_sid => 'AC228ba7a5fe4238be081ea6f3c44186f3', :auth_token => '79ad98413d911947f0ba369d295ae7a3' }
 
-  def resource_uri(account_sid=nil)
+  def resource_uri(account_sid=nil, connect=nil)
     account_sid ||= Twilio::ACCOUNT_SID
-    "https://#{Twilio::ACCOUNT_SID}:#{Twilio::AUTH_TOKEN}@api.twilio.com/2010-04-01/Accounts/#{account_sid}/Calls"
+    "https://#{connect ? account_sid : Twilio::ACCOUNT_SID}:#{Twilio::AUTH_TOKEN}@api.twilio.com/2010-04-01/Accounts/#{account_sid}/Calls"
   end
 
   def stub_api_call
@@ -20,10 +20,6 @@ describe Twilio::Call do
 
   def new_call_should_have_been_made
     a_request(:post, resource_uri + '.json').with(:body => minimum_params).should have_been_made
-  end
-
-  def canned_response(resp)
-    File.new File.join(File.expand_path(File.dirname __FILE__), 'support', 'responses', "#{resp}.json")
   end
 
   describe '.all' do
@@ -42,7 +38,7 @@ describe Twilio::Call do
         resp.all? { |r| r.is_a? Twilio::Call }.should be_true
       end
 
-      JSON.parse(canned_response('list_calls').read)['calls'].each_with_index do |obj,i|
+      JSON.parse(canned_response('list_calls'))['calls'].each_with_index do |obj,i|
         obj.each do |attr, value|
           specify { resp[i].send(attr).should == value }
         end
@@ -53,6 +49,14 @@ describe Twilio::Call do
           to_return :body => canned_response('list_calls'), :status => 200
         Twilio::Call.all :page => 5, :status => 'dialled', :started_before => Date.parse('2010-12-12'), :ended_after => Date.parse('2010-11-12')
         a_request(:get, resource_uri + '.json?EndTime>=2010-11-12&Page=5&StartTime<=2010-12-12&Status=dialled').should have_been_made
+      end
+    end
+
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+          to_return :body => canned_response('list_connect_calls'), :status => 200
+        Twilio::Call.all :account_sid => 'AC0000000000000000000000000000', :connect => true
       end
     end
 
@@ -72,7 +76,7 @@ describe Twilio::Call do
           resp.all? { |r| r.is_a? Twilio::Call }.should be_true
         end
 
-        JSON.parse(canned_response('list_calls').read)['calls'].each_with_index do |obj,i|
+        JSON.parse(canned_response('list_calls'))['calls'].each_with_index do |obj,i|
           obj.each do |attr, value|
             specify { resp[i].send(attr).should == value }
           end
@@ -102,7 +106,7 @@ describe Twilio::Call do
           resp.all? { |r| r.is_a? Twilio::Call }.should be_true
         end
 
-        JSON.parse(canned_response('list_calls').read)['calls'].each_with_index do |obj,i|
+        JSON.parse(canned_response('list_calls'))['calls'].each_with_index do |obj,i|
           obj.each do |attr, value|
             specify { resp[i].send(attr).should == value }
           end
@@ -133,6 +137,14 @@ describe Twilio::Call do
           to_return :body => canned_response('list_calls'), :status => 200
         Twilio::Call.count :friendly_name => 'example', :status => 'in-progress'
         a_request(:get, resource_uri + query).should have_been_made
+      end
+    end
+
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+          to_return :body => canned_response('list_connect_calls'), :status => 200
+        Twilio::Call.count :account_sid => 'AC0000000000000000000000000000', :connect => true
       end
     end
 
@@ -186,7 +198,7 @@ describe Twilio::Call do
           call.should be_a Twilio::Call
         end
 
-        JSON.parse(canned_response('call_created').read).except('method').each do |k,v|
+        JSON.parse(canned_response('call_created')).except('method').each do |k,v|
           # OOPS! Collides with Object#method, access with obj[:method] syntax
           specify { call.send(k).should == v }
         end
@@ -199,6 +211,14 @@ describe Twilio::Call do
           call = Twilio::Call.find 'phony'
           call.should be_nil
         end
+      end
+    end
+
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '/CAa346467ca321c71dbd5e12f627deb854' + '.json' ).
+          to_return :body => canned_response('connect_call_created'), :status => 200
+        Twilio::Call.find 'CAa346467ca321c71dbd5e12f627deb854', :account_sid => 'AC0000000000000000000000000000', :connect => true
       end
     end
 
@@ -216,7 +236,7 @@ describe Twilio::Call do
             call.should be_a Twilio::Call
           end
 
-          JSON.parse(canned_response('call_created').read).except('method').each do |k,v|
+          JSON.parse(canned_response('call_created')).except('method').each do |k,v|
             # OOPS! Collides with Object#method, access with obj[:method] syntax
             specify { call.send(k).should == v }
           end
@@ -247,7 +267,7 @@ describe Twilio::Call do
             call.should be_a Twilio::Call
           end
 
-          JSON.parse(canned_response('call_created').read).except('method').each do |k,v|
+          JSON.parse(canned_response('call_created')).except('method').each do |k,v|
             # OOPS! Collides with Object#method, access with obj[:method] syntax
             specify { call.send(k).should == v }
           end
@@ -280,6 +300,16 @@ describe Twilio::Call do
           to_return(:status => 200, :body => canned_response('call_created'))
       end
 
+      context 'using a twilio connect subaccount' do
+        it 'uses the account sid as the username for basic auth' do
+          stub_request(:post, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+            with(:body => "To=%2B14155551212&From=%2B14158675309&Url=http%3A%2F%2Flocalhost%3A3000%2Fhollaback&SendDigits=1234%252300&IfMachine=Continue").
+            to_return :body => canned_response('connect_call_created'), :status => 200
+          Twilio::Call.create :to => '+14155551212', :from => '+14158675309', :url => 'http://localhost:3000/hollaback',
+            :send_digits => '1234#00', :if_machine => 'Continue', :account_sid => 'AC0000000000000000000000000000', :connect => true
+        end
+      end
+
       context 'on a subaccount' do
         before do
           stub_request(:post, resource_uri('SUBACCOUNT_SID') + '.json').
@@ -306,7 +336,7 @@ describe Twilio::Call do
           end
         end
       end
-      JSON.parse(canned_response('call_created').read).except('method').each do |k,v|
+      JSON.parse(canned_response('call_created')).except('method').each do |k,v|
         # OOPS! Collides with Object#method, access with obj[:method] syntax
         specify { call.send(k).should == v }
       end
@@ -417,6 +447,26 @@ describe Twilio::Call do
         call.update_attributes :url => 'http://localhost:3000/hollaback'
         a_request(:post, resource_uri + '/' + call.sid + '.json').with(:body => 'Url=http%3A%2F%2Flocalhost%3A3000%2Fhollaback').should have_been_made
       end
+      context 'using a twilio connect subaccount' do
+        it 'uses the account sid for basic auth' do
+          stub_request(:post, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+            with(:body => minimum_params).
+            to_return :body => canned_response('connect_call_created'), :status => 200
+          call = Twilio::Call.create :to => '+14155551212', :from => '+14158675309', :url => 'http://localhost:3000/hollaback',
+            :account_sid => 'AC0000000000000000000000000000', :connect => true
+
+          stub_request(:post, resource_uri('AC0000000000000000000000000000', true) + '/CAa346467ca321c71dbd5e12f627deb854' + '.json' ).
+            with(:body => 'Url=http%3A%2F%2Flocalhost%3A3000%2Fhollaback').
+            to_return :body => canned_response('connect_call_created'), :status => 200
+
+          call.update_attributes :url => 'http://localhost:3000/hollaback'
+
+          a_request(:post, resource_uri('AC0000000000000000000000000000', true) + '/CAa346467ca321c71dbd5e12f627deb854' + '.json' ).
+            with(:body => 'Url=http%3A%2F%2Flocalhost%3A3000%2Fhollaback').
+            should have_been_made
+
+        end
+      end
     end
   end
 
@@ -439,13 +489,25 @@ describe Twilio::Call do
 
   describe 'associations' do
     describe 'has_many' do
-      describe 'recordings' do
-        it 'proxies method calls to Twilio::Recording with current call sid inserted into options' do
-          stub_request(:post, resource_uri + '.json').with(:body => minimum_params).
-            to_return :body => canned_response('call_created')
+      it 'delegates the method to the associated class with the account sid merged into the options' do
+        stub_request(:post, resource_uri + '.json').with(:body => minimum_params).
+          to_return :body => canned_response('call_created')
 
-          Twilio::Recording.expects(:all).with(:limit => 10, :call_sid => call.sid)
-          call.recordings.all :limit => 10
+        [:recordings, :notifications].each do |association|
+          klass = Twilio.const_get association.to_s.classify
+          klass.expects(:foo).with  :limit => 5, call_sid: call.sid
+          call.send(association).foo :limit => 5
+        end
+      end
+
+      context 'where the account is a connect subaccount' do
+        it 'delegates the method to the associated class with the account sid merged into the options' do
+          call = Twilio::Call.new JSON.parse(canned_response('connect_call_created'))
+          [:recordings, :notifications].each do |association|
+            klass = Twilio.const_get association.to_s.classify
+            klass.expects(:foo).with :limit => 5, call_sid: call.sid, :account_sid => call.account_sid, :connect => true
+            call.send(association).foo :limit => 5
+          end
         end
       end
     end

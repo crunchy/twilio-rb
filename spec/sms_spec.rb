@@ -2,9 +2,13 @@ require File.expand_path(File.dirname(__FILE__) + '/spec_helper')
 
 describe Twilio::SMS do
 
-  let(:resource_uri)   { "https://#{Twilio::ACCOUNT_SID}:#{Twilio::AUTH_TOKEN}@api.twilio.com/2010-04-01/Accounts/AC000000000000/SMS/Messages" }
   let(:minimum_sms_params) { 'To=%2B14158141829&From=%2B14159352345&Body=Jenny%20please%3F!%20I%20love%20you%20%3C3' }
   let(:sms)                { Twilio::SMS.create(:to => '+14158141829', :from => '+14159352345', :body => 'Jenny please?! I love you <3') }
+
+  def resource_uri(account_sid=nil, connect=nil)
+    account_sid ||= Twilio::ACCOUNT_SID
+    "https://#{connect ? account_sid : Twilio::ACCOUNT_SID}:#{Twilio::AUTH_TOKEN}@api.twilio.com/2010-04-01/Accounts/#{account_sid}/SMS/Messages"
+  end
 
   def stub_new_sms
     stub_request(:post, resource_uri + '.json').with(:body => minimum_sms_params).to_return :body => canned_response('sms_created'), :status => 201
@@ -12,10 +16,6 @@ describe Twilio::SMS do
 
   def new_sms_should_have_been_made
     a_request(:post, resource_uri + '.json').with(:body => minimum_sms_params).should have_been_made
-  end
-
-  def canned_response(resp)
-    File.new File.join(File.expand_path(File.dirname __FILE__), 'support', 'responses', "#{resp}.json")
   end
 
   before { Twilio::Config.setup :account_sid => 'AC000000000000', :auth_token => '79ad98413d911947f0ba369d295ae7a3' }
@@ -28,6 +28,14 @@ describe Twilio::SMS do
 
     let(:resp) { Twilio::SMS.all }
 
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+          to_return :body => canned_response('list_connect_messages'), :status => 200
+        Twilio::SMS.all :account_sid => 'AC0000000000000000000000000000', :connect => true
+      end
+    end
+
     it 'returns a collection of objects with a length corresponding to the response' do
       resp.length.should == 1
     end
@@ -36,7 +44,7 @@ describe Twilio::SMS do
       resp.all? { |r| r.is_a? Twilio::SMS }.should be_true
     end
 
-    JSON.parse(canned_response('list_messages').read)['sms_messages'].each_with_index do |obj,i|
+    JSON.parse(canned_response('list_messages'))['sms_messages'].each_with_index do |obj,i|
       obj.each do |attr, value|
         specify { resp[i].send(attr).should == value }
       end
@@ -52,6 +60,15 @@ describe Twilio::SMS do
   end
 
   describe '.count' do
+
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+          to_return :body => canned_response('list_connect_messages'), :status => 200
+        Twilio::SMS.count :account_sid => 'AC0000000000000000000000000000', :connect => true
+      end
+    end
+
     it 'returns the number of resources' do
       stub_request(:get, resource_uri + '.json').
         to_return :body => canned_response('list_messages'), :status => 200
@@ -68,6 +85,14 @@ describe Twilio::SMS do
   end
 
   describe '.find' do
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:get, resource_uri('AC0000000000000000000000000000', true) + '/SMa346467ca321c71dbd5e12f627deb854' + '.json' ).
+          to_return :body => canned_response('connect_sms_created'), :status => 200
+        Twilio::SMS.find 'SMa346467ca321c71dbd5e12f627deb854', :account_sid => 'AC0000000000000000000000000000', :connect => true
+      end
+    end
+
     context 'for a valid sms sid' do
       before do
         stub_request(:get, resource_uri + '/SM90c6fc909d8504d45ecdb3a3d5b3556e.json').
@@ -76,7 +101,7 @@ describe Twilio::SMS do
 
       let(:sms) { Twilio::SMS.find 'SM90c6fc909d8504d45ecdb3a3d5b3556e' }
 
-      JSON.parse(canned_response('sms_created').read).each do |k,v|
+      JSON.parse(canned_response('sms_created')).each do |k,v|
         specify { sms.send(k).should == v }
       end
 
@@ -96,6 +121,14 @@ describe Twilio::SMS do
   end
 
   describe '.create' do
+    context 'using a twilio connect subaccount' do
+      it 'uses the account sid as the username for basic auth' do
+        stub_request(:post, resource_uri('AC0000000000000000000000000000', true) + '.json' ).
+          with(:body => "To=%2B14155551212&From=%2B14158675309&Body=boo").
+          to_return :body => canned_response('connect_sms_created'), :status => 200
+        Twilio::SMS.create :to => '+14155551212', :from => '+14158675309', :body => 'boo', :account_sid => 'AC0000000000000000000000000000', :connect => true
+      end
+    end
     context 'when authentication credentials are not configured' do
       it 'raises Twilio::ConfigurationError' do
         Twilio.send :remove_const, :ACCOUNT_SID
@@ -110,7 +143,7 @@ describe Twilio::SMS do
         new_sms_should_have_been_made
       end
 
-      JSON.parse(canned_response('sms_created').read).each do |k,v|
+      JSON.parse(canned_response('sms_created')).each do |k,v|
         specify { sms.send(k).should == v }
       end
     end
